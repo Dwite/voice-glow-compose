@@ -52,6 +52,8 @@ fun speech(seconds: Float): Float {
 private val Palettes = listOf(
     "Colorful" to VoiceGlowColors.Colorful, "Mono" to VoiceGlowColors.Mono, "Ocean" to VoiceGlowColors.Ocean, "Sunset" to VoiceGlowColors.Sunset,
     "Forest" to VoiceGlowColors.Forest, "Candy" to VoiceGlowColors.Candy, "Ice" to VoiceGlowColors.Ice, "Gold" to VoiceGlowColors.Gold,
+    // A palette grown around one colour, as an app would from its brand colour.
+    "From blue" to VoiceGlowColors.from(Color(0xFF2F6BFF)),
 )
 private val Moods = listOf("None" to VoiceMood.Neutral, "Happy" to VoiceMood.Happy, "Calm" to VoiceMood.Calm, "Angry" to VoiceMood.Angry, "Sad" to VoiceMood.Sad)
 
@@ -67,6 +69,8 @@ fun Sample() {
     var mood by remember { mutableStateOf(Moods.first()) }
     var speaking by remember { mutableStateOf(true) }
     var manual by remember { mutableFloatStateOf(0.6f) }
+    var strength by remember { mutableFloatStateOf(1f) }
+    var scale by remember { mutableFloatStateOf(1f) }
     var seconds by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(Unit) { while (true) withFrameNanos { seconds = it / 1e9f } }
 
@@ -79,13 +83,13 @@ fun Sample() {
 
     val hosts: @Composable () -> Unit = {
         // A chat input or a card.
-        VoiceGlowBox(level, Modifier.widthIn(max = 350.dp).fillMaxWidth().height(120.dp), VoiceGlowType.Standard, mood = mood.second, colors = palette.second, theme = theme, cornerRadius = 20.dp) {
+        VoiceGlowBox(level, Modifier.widthIn(max = 350.dp).fillMaxWidth().height(120.dp), VoiceGlowType.Standard, palette.second, theme, mood.second, strength, scale, cornerRadius = 20.dp) {
             Box(Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)).background(surface).padding(20.dp)) {
                 Text("Listening…", color = ink.copy(alpha = 0.7f), fontSize = 15.sp)
             }
         }
         // A recording pill.
-        VoiceGlowBox(level, Modifier.size(150.dp, 44.dp), VoiceGlowType.Pill, mood = mood.second, colors = palette.second, theme = theme, cornerRadius = 22.dp) {
+        VoiceGlowBox(level, Modifier.size(150.dp, 44.dp), VoiceGlowType.Pill, palette.second, theme, mood.second, strength, scale, cornerRadius = 22.dp) {
             Box(Modifier.fillMaxSize().clip(RoundedCornerShape(22.dp)).background(surface), contentAlignment = Alignment.Center) {
                 Text("Recording", color = ink, fontSize = 13.sp)
             }
@@ -95,17 +99,19 @@ fun Sample() {
         Choices("Theme", listOf("Dark", "Light"), if (dark) "Dark" else "Light", ink) { dark = it == "Dark" }
         Choices("Voice", listOf("Speech", "Slider"), if (speaking) "Speech" else "Slider", ink) { speaking = it == "Speech" }
         if (!speaking) Slider(manual, { manual = it }, Modifier.widthIn(max = 350.dp).fillMaxWidth())
+        Amount("Strength", strength, 0f..1f, ink) { strength = it }
+        Amount("Scale", scale, 0.5f..1.6f, ink) { scale = it }
     }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(page)) {
         if (maxWidth < 720.dp) {
             // On a phone: the bottom of the screen itself, behind everything.
             Box(Modifier.fillMaxSize().background(surface))
-            VoiceGlow(level, Modifier.fillMaxSize(), VoiceGlowType.Mobile, mood = mood.second, colors = palette.second, theme = theme)
+            VoiceGlow(level, Modifier.fillMaxSize(), VoiceGlowType.Mobile, palette.second, theme, mood.second, strength, scale)
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).safeDrawingPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) { hosts() }
         } else {
             Row(Modifier.fillMaxSize().padding(32.dp), horizontalArrangement = Arrangement.spacedBy(40.dp)) {
-                VoiceGlowBox(level, Modifier.size(320.dp, 680.dp), VoiceGlowType.Mobile, mood = mood.second, colors = palette.second, theme = theme, cornerRadius = 44.dp) {
+                VoiceGlowBox(level, Modifier.size(320.dp, 680.dp), VoiceGlowType.Mobile, palette.second, theme, mood.second, strength, scale, cornerRadius = 44.dp) {
                     Box(Modifier.fillMaxSize().clip(RoundedCornerShape(44.dp)).background(surface), contentAlignment = Alignment.Center) {
                         Text("How can I help you?", color = ink, fontSize = 18.sp)
                     }
@@ -113,6 +119,14 @@ fun Sample() {
                 Column(verticalArrangement = Arrangement.spacedBy(28.dp)) { hosts() }
             }
         }
+    }
+}
+
+@Composable
+private fun Amount(title: String, value: Float, range: ClosedFloatingPointRange<Float>, ink: Color, onChange: (Float) -> Unit) {
+    Column {
+        Text("$title  ${(value * 100).toInt()}%", color = ink.copy(alpha = 0.6f), fontSize = 12.sp)
+        Slider(value, onChange, Modifier.widthIn(max = 350.dp).fillMaxWidth(), valueRange = range)
     }
 }
 

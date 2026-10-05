@@ -7,26 +7,59 @@ import io.github.dwite.voiceglow.internal.GlowRgb
 import io.github.dwite.voiceglow.internal.OkLab
 
 /**
- * The colours of a glow: one for each of its seven lobes, for a dark and for a
- * light background. Fewer than seven repeat. A new set crosses over, so the
- * colours can follow whoever is speaking.
+ * The colours of a glow.
+ *
+ * The glow is seven lobes of light, the centre one first and then the pairs
+ * outward, each with its own colour; fewer than seven colours repeat. It can
+ * have one set for a dark background and one for a light one.
+ *
+ * ```
+ * VoiceGlowColors.Sunset                                   // one of the eight palettes
+ * VoiceGlowColors(listOf(Color(0xFFFF78BE), Color(0xFF9664FF)))  // your own
+ * VoiceGlowColors(Color(0xFFFF78BE))                       // one colour
+ * VoiceGlowColors.from(MaterialTheme.colorScheme.primary)  // a palette around one colour
+ * VoiceGlowColors.Ocean.copy(drift = false)                // a palette, changed
+ * ```
+ *
+ * New colours cross over instead of cutting, so a glow can change colour with
+ * whoever is speaking.
  */
 @Immutable
 public class VoiceGlowColors private constructor(
-    internal val dark: Array<OkLab>,
-    internal val light: Array<OkLab>,
+    private val dark: Array<OkLab>,
+    private val light: Array<OkLab>,
+    /** The band's own colours; `null` keeps the theme's (a white core with red, green and blue fringes on dark). */
+    public val band: VoiceGlowBandColors?,
     /** The colours a [VoiceMood] takes the glow to. */
     public val mood: VoiceMoodColors,
-    /** Holds still and dimmer: the monochrome look. */
-    internal val mono: Boolean,
+    /** The colours wander slowly in hue. Off holds them exactly as given. */
+    public val drift: Boolean,
+    /** The monochrome look: every layer dimmer. */
+    internal val dim: Float,
 ) {
-    public constructor(dark: List<Color>, light: List<Color> = dark, mood: VoiceMoodColors = VoiceMoodColors.Standard) :
-        this(dark.lab(), light.lab(), mood, mono = false)
+    /** [dark] on a dark background and [light] on a light one. */
+    public constructor(
+        dark: List<Color>,
+        light: List<Color> = dark,
+        band: VoiceGlowBandColors? = null,
+        mood: VoiceMoodColors = VoiceMoodColors.Standard,
+        drift: Boolean = true,
+    ) : this(dark.lab(), light.lab(), band, mood, drift, dim = 1f)
 
-    /** The same colours, with other colours for the moods. */
-    public fun with(mood: VoiceMoodColors): VoiceGlowColors = VoiceGlowColors(dark, light, mood, mono)
+    /** One [color] for the whole glow, on any background. */
+    public constructor(color: Color) : this(listOf(color))
+
+    /** These colours with some things changed. */
+    public fun copy(band: VoiceGlowBandColors? = this.band, mood: VoiceMoodColors = this.mood, drift: Boolean = this.drift): VoiceGlowColors =
+        VoiceGlowColors(dark, light, band, mood, drift, dim)
 
     internal fun lab(isDark: Boolean): Array<OkLab> = if (isDark) dark else light
+
+    override fun equals(other: Any?): Boolean =
+        other is VoiceGlowColors && dark.contentEquals(other.dark) && light.contentEquals(other.light) &&
+            band == other.band && mood == other.mood && drift == other.drift && dim == other.dim
+
+    override fun hashCode(): Int = 31 * (31 * dark.contentHashCode() + light.contentHashCode()) + (band?.hashCode() ?: 0)
 
     public companion object {
         /** The whole spectrum: the default. */
@@ -35,11 +68,12 @@ public class VoiceGlowColors private constructor(
             light = intArrayOf(255, 201, 21, 126, 196, 255, 180, 40, 230, 235, 100, 160, 255, 176, 122, 154, 160, 255, 127, 217, 238),
         )
 
-        /** Greys that hold still. */
+        /** Greys that hold still, a little dimmer. */
         public val Mono: VoiceGlowColors = palette(
             dark = intArrayOf(215, 215, 215, 180, 180, 180, 190, 190, 190, 160, 160, 160, 170, 170, 170, 150, 150, 150, 155, 155, 155),
             light = intArrayOf(60, 60, 60, 90, 90, 90, 85, 85, 85, 110, 110, 110, 105, 105, 105, 125, 125, 125, 120, 120, 120),
-            mono = true,
+            drift = false,
+            dim = 0.6f,
         )
         public val Ocean: VoiceGlowColors = palette(
             dark = intArrayOf(80, 140, 255, 40, 200, 230, 120, 90, 255, 30, 170, 210, 160, 80, 240, 60, 110, 255, 40, 190, 180),
@@ -66,10 +100,35 @@ public class VoiceGlowColors private constructor(
             light = intArrayOf(200, 140, 10, 190, 120, 0, 210, 160, 30, 180, 110, 0, 205, 170, 40, 175, 115, 5, 195, 150, 20),
         )
 
-        private fun palette(dark: IntArray, light: IntArray, mono: Boolean = false) =
-            VoiceGlowColors(channels(dark).lab(), channels(light).lab(), VoiceMoodColors.Standard, mono)
+        /**
+         * A palette around one colour, such as a brand colour: [seed] at the
+         * centre and its neighbours in hue on the lobes beside it, [hueSpread]
+         * degrees to each side at the widest. It is made bright enough to glow
+         * on a dark background and deep enough to show on a light one, so a
+         * very dark or very pale seed keeps its hue more than its lightness.
+         */
+        public fun from(seed: Color, hueSpread: Float = 48f): VoiceGlowColors {
+            val base = OkLab.of(GlowRgb.of(seed))
+            // Per lobe, centre first then the pairs outward: a share of the spread, and a small step in lightness.
+            val turns = floatArrayOf(0f, 0.5f, -0.5f, 1f, -1f, 0.25f, -0.25f)
+            val steps = floatArrayOf(0f, 0.04f, -0.03f, 0.06f, -0.05f, 0.02f, -0.02f)
+            fun around(lightness: ClosedFloatingPointRange<Float>) =
+                Array(GlowLobes.size) { i -> base.shifted(hueSpread * turns[i], (base.l.coerceIn(lightness) + steps[i]), minChroma = 0.12f) }
+            return VoiceGlowColors(around(0.66f..0.86f), around(0.5f..0.7f), band = null, mood = VoiceMoodColors.Standard, drift = true, dim = 1f)
+        }
+
+        private fun palette(dark: IntArray, light: IntArray, drift: Boolean = true, dim: Float = 1f) =
+            VoiceGlowColors(channels(dark).lab(), channels(light).lab(), band = null, mood = VoiceMoodColors.Standard, drift = drift, dim = dim)
     }
 }
+
+/**
+ * The colours of the band, the bright line on the glow's ceiling: its [core],
+ * the fringe that rides [above] it, the fringe [below] it, and the faint
+ * third colour [between] the core and the upper fringe.
+ */
+@Immutable
+public data class VoiceGlowBandColors(val core: Color, val above: Color, val below: Color, val between: Color = core)
 
 /**
  * The colours the mood plane maps to: one set of seven per corner, for a dark
@@ -89,11 +148,22 @@ public class VoiceGlowColors private constructor(
  */
 @Immutable
 public class VoiceMoodColors private constructor(private val dark: Corners, private val light: Corners) {
-    internal class Corners(val happy: Array<OkLab>, val angry: Array<OkLab>, val sad: Array<OkLab>, val calm: Array<OkLab>)
+    internal class Corners(val happy: Array<OkLab>, val angry: Array<OkLab>, val sad: Array<OkLab>, val calm: Array<OkLab>) {
+        fun same(other: Corners) =
+            happy.contentEquals(other.happy) && angry.contentEquals(other.angry) && sad.contentEquals(other.sad) && calm.contentEquals(other.calm)
+    }
+
+    override fun equals(other: Any?): Boolean = other is VoiceMoodColors && dark.same(other.dark) && light.same(other.light)
+
+    override fun hashCode(): Int = 31 * dark.happy.contentHashCode() + light.happy.contentHashCode()
 
     /** One list of colours per corner, used on both backgrounds. Fewer than seven repeat. */
     public constructor(happy: List<Color>, angry: List<Color>, sad: List<Color>, calm: List<Color>) :
         this(Corners(happy.lab(), angry.lab(), sad.lab(), calm.lab()))
+
+    /** One colour per corner: the simplest way to say what each feeling looks like. */
+    public constructor(happy: Color, angry: Color, sad: Color, calm: Color) :
+        this(listOf(happy), listOf(angry), listOf(sad), listOf(calm))
 
     private constructor(both: Corners) : this(both, both)
 

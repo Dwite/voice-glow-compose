@@ -77,19 +77,61 @@ The glow is authored for a chat input about 350 dp wide. `type` retunes it for o
 | `VoiceGlowType.Pill` | A small recording pill, about 150 × 44 dp. |
 | `VoiceGlowType.Mobile` | The bottom of a phone screen. |
 
-## Colours and theme
+## Everything you can set
 
-Eight palettes: `Colorful` (the default), `Mono`, `Ocean`, `Sunset`, `Forest`, `Candy`, `Ice`, `Gold`. Or your own, up to seven colours:
+The parameters of `VoiceGlow` and `VoiceGlowBox`:
+
+| Parameter | |
+|---|---|
+| `level` | The voice, 0–1, as a function read every frame. |
+| `type` | `Standard`, `Pill` or `Mobile`: the starting point of everything below. |
+| `colors` | The lobe, band and mood colours. |
+| `theme` | `Auto` (the system's dark theme setting), `Dark` or `Light`. On a light background the glow is pastel, with a white wash at its source. |
+| `mood` | How the voice feels. |
+| `strength` | How much of the glow shows, 0–1. It can be animated. |
+| `scale` | Sizes the whole effect as one thing, on top of the type's own size. |
+| `active` | Fades the glow in and out. |
+| `paused` | Holds the glow exactly where it is. |
+| `cornerRadius` | The host's corner radius. |
+| `options` | Every finer adjustment: see below. |
+| `haze` | Thins the light with height (`VoiceGlow` only). |
+| `animated` | Off draws the one frame a steady level settles on, for previews and screenshot tests (`VoiceGlow` only). |
 
 ```kotlin
-VoiceGlow(level = { level }, colors = VoiceGlowColors(listOf(Color(0xFFFF78BE), Color(0xFFBE96FF), Color(0xFF9664FF))))
+VoiceGlow(
+    level = { level },
+    type = VoiceGlowType.Mobile,
+    colors = VoiceGlowColors.from(MaterialTheme.colorScheme.primary),
+    strength = 0.7f,
+    scale = 1.2f,
+    options = VoiceGlowOptions(reach = 2f, attack = 0.15f, bandStrength = 1.2f),
+)
+```
+
+### Colours
+
+```kotlin
+VoiceGlowColors.Sunset                                    // a palette: Colorful, Mono, Ocean, Sunset, Forest, Candy, Ice, Gold
+VoiceGlowColors(Color(0xFFFF78BE))                        // one colour
+VoiceGlowColors(listOf(pink, lavender, violet))           // your own, up to seven: the centre lobe first, then the pairs outward
+VoiceGlowColors(dark = onDark, light = onLight)           // a set for each background
+VoiceGlowColors.from(brandColor)                          // a palette grown around one colour
+VoiceGlowColors.from(brandColor, hueSpread = 90f)         // the same, reaching further around the hue circle
+```
+
+`copy` changes the rest:
+
+```kotlin
+VoiceGlowColors.Ocean.copy(
+    band = VoiceGlowBandColors(core = Color.White, above = Color(0xFFFFB347), below = Color(0xFF4FC3F7)),
+    mood = VoiceMoodColors(happy = Color(0xFF46E678), angry = Color(0xFFFF7A5C), sad = Color(0xFF5A7BFF), calm = Color(0xFF3CD2C8)),
+    drift = false,   // hold the colours exactly as given
+)
 ```
 
 New colours cross over instead of cutting, so the glow can change colour with whoever is speaking.
 
-`theme` is `Auto` (the system's dark theme setting), `Dark` or `Light`. On a light background the glow is pastel, with a white wash at its source.
-
-## Mood
+### Mood
 
 A mood tints the glow with how the voice feels: happy green, calm teal, and red for anything negative.
 
@@ -97,34 +139,53 @@ A mood tints the glow with how the voice feels: happy green, calm teal, and red 
 VoiceGlow(level = { level }, mood = VoiceMood(valence = 0.8f, arousal = 0.7f))
 ```
 
-`valence` runs from −1 (negative) to 1 (positive), `arousal` from 0 (calm) to 1 (excited), and `confidence` says how sure the source is. The glow leaves its own colours in proportion to the confidence, and keeps them below 15%. Where the mood comes from is yours to decide: a sentiment model on the transcript, an emotion model on the audio, a server. `VoiceMood.blend(tone, meaning)` merges two such reads. `VoiceMoodColors` changes the colours of the four corners.
+`valence` runs from −1 (negative) to 1 (positive), `arousal` from 0 (calm) to 1 (excited), and `confidence` says how sure the source is. The glow leaves its own colours in proportion to the confidence, and keeps them below 15%. Where the mood comes from is yours to decide: a sentiment model on the transcript, an emotion model on the audio, a server. `VoiceMood.blend(tone, meaning)` merges two such reads.
 
 This library does not detect emotion. In the original, that is part of VoiceGlow Pro.
 
-## Options
+### Options
 
-`VoiceGlowOptions` holds the fine tuning. Every `null` keeps the type's own value.
+`VoiceGlowOptions` has every finer adjustment, under the names the original's props have, so numbers tuned in the original's Studio carry over as they are. Every `null` keeps the value of the type and theme in use.
 
 | | |
 |---|---|
-| `threshold`, `attack`, `release` | The noise gate, and the seconds to rise and to settle. |
-| `idle`, `breatheSeconds` | The breathing presence while silent. `idle = 0f` hides the glow when silent. |
-| `ripple` | The lobes ripple with slow wobbles of the level. |
-| `scale` | Sizes the whole effect as one thing. |
+| `sensitivity`, `threshold`, `attack`, `release` | Gain on the level, the noise gate, and the seconds to rise and to settle. |
+| `idle`, `breatheSeconds` | The breathing presence while silent. `idle = 0f` hides the glow between sounds. |
+| `ripple` | The lobes ripple with slow wobbles of the level (the original's `bands`). |
 | `reach`, `spread` | How far the voice lifts and widens the glow. |
 | `flow` | dp per second the colours travel sideways at full level. |
-| `bend`, `bandStrength`, `bandWidth` | The band. |
-| `brightness`, `saturation`, `strength` | Colour and overall strength. |
-| `hueRange`, `hueSeconds` | The slow hue drift. `hueRange = 0f` holds the colours still. |
+| `bend` | How far the glow's ceiling humps up at the centre. |
+| `brightness`, `saturation` | The light's colour. |
+| `hueRange`, `hueSeconds` | The slow hue drift (the original's `hueDuration`). |
+| `strokeOpacity`, `innerOpacity`, `bloomOpacity` | The three layers: the fine line on the edge, the soft light along the edges, the wide bloom. |
+| `glowSize` | The softness of the bloom at the host's edges and of the white wash. |
+| `bandStrength`, `bandWidth`, `bandPosition`, `bandCurve`, `bandSpread`, `bandSkew`, `bandOffset`, `bandAberration` | The band: its opacity, thickness, height, shape and the split of its fringes. |
+| `bandTail`, `bandTailPosition`, `bandTailCurve`, `bandTailOverflow` | The rise of the band's ends toward the corners. `bandTail = 0f` ends the band inside the host. |
+| `glowWidth`, `glowHeight`, `lobeSpacing`, `softness` | The seven lobes. |
+| `rangeWidth`, `rangeHeight` | The ellipse the glow is kept to. |
+| `strokeScale`, `innerScale`, `innerHeight`, `bloomScale`, `bloomHeight` | The size of the lobes in each layer. |
+| `coreSize`, `coreLight`, `coreLightWidth`, `coreLightHeight` | The hot spot on the edge, and the white wash at the source. |
 | `moodStrength`, `moodSmoothing`, `moodRelease` | How far and how fast a mood takes the colours. |
+
+Where the names differ from the original's props:
+
+| Original | Here |
+|---|---|
+| `colorVariant`, `colors`, `bandColors`, `staticColors` | `colors`: a palette, your own colours, `copy(band = …)`, `copy(drift = false)` |
+| `borderRadius` | `cornerRadius` |
+| `bands` | `options.ripple` |
+| `hueDuration`, `breatheDuration` | `options.hueSeconds`, `options.breatheSeconds` |
+| `strength` | `strength`, as a share of the type's own strength rather than in place of it |
+| `scale` | `scale`, on top of the type's own size rather than in place of it |
+| `stream`, `sensitivity` | No microphone here. `options.sensitivity` is a gain on `level`. |
+
+### Haze
 
 `haze` is not in the original. It thins the light with height, for a screen with buttons and a line of text near its foot: the light stays bright behind the buttons, and the text above them stays easy to read.
 
 ```kotlin
 VoiceGlow(level = { level }, type = VoiceGlowType.Mobile, haze = VoiceGlowHaze(from = 60.dp, to = 90.dp, keep = 0.4f))
 ```
-
-`animated = false` draws the one frame a steady level settles on, for previews and screenshot tests.
 
 ## How close it is to the original
 
@@ -147,6 +208,7 @@ Not ported:
 - The `dots` and `lines` looks.
 - The motion that gathers the lobes into one beam. In the original it drives the processing state of VoiceGlow Pro.
 - The faint inset shadow of the inner light.
+- The callbacks (`onLevel`, `onActivate`, `onDeactivate`).
 
 ## Sample
 

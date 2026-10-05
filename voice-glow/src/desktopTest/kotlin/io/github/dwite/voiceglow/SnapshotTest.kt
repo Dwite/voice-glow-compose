@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +44,9 @@ class SnapshotTest {
         mood: VoiceMood = VoiceMood.Neutral,
         colors: VoiceGlowColors = VoiceGlowColors.Colorful,
         haze: VoiceGlowHaze? = null,
+        strength: Float = 1f,
+        scale: Float = 1f,
+        options: VoiceGlowOptions = VoiceGlowOptions(),
     ): Image {
         val scene = ImageComposeScene(width = host.width * Scale, height = host.height * Scale, density = Density(Scale.toFloat())) {
             Box(Modifier.fillMaxSize().background(if (dark) Color.Black else Color.White)) {
@@ -54,7 +58,10 @@ class SnapshotTest {
                     mood = mood,
                     colors = colors,
                     theme = if (dark) VoiceGlowTheme.Dark else VoiceGlowTheme.Light,
+                    strength = strength,
+                    scale = scale,
                     cornerRadius = host.radius.dp,
+                    options = options,
                     haze = haze,
                     animated = false,
                 )
@@ -136,6 +143,73 @@ class SnapshotTest {
         // 250 dp up, well above the haze: far less light. 20 dp up, below it: the same.
         assertTrue(hazed.at(0.5f, 1f - 250f / 851f).light() < plain.at(0.5f, 1f - 250f / 851f).light() * 0.75f)
         assertTrue(kotlin.math.abs(hazed.at(0.5f, 1f - 20f / 851f).light() - plain.at(0.5f, 1f - 20f / 851f).light()) < 0.02f)
+    }
+
+    /** How far a picture is from the bare host: the mean change of brightness over a grid of points. */
+    private fun Image.lightAdded(dark: Boolean = true): Float {
+        val ground = if (dark) 0x1D / 255f else 0xF4 / 255f
+        var total = 0f
+        var count = 0
+        for (x in 1..9) for (y in 1..19) {
+            total += kotlin.math.abs(at(x / 10f, y / 20f).light() - ground)
+            count++
+        }
+        return total / count
+    }
+
+    @Test
+    fun strengthTurnsTheWholeGlowDown() {
+        val phone = hosts.first()
+        val full = render(phone, 1f).lightAdded()
+        val half = render(phone, 1f, strength = 0.5f).also { it.save("mobile_dark_strength_050") }.lightAdded()
+        val none = render(phone, 1f, strength = 0f).lightAdded()
+        assertTrue(half > full * 0.3f && half < full * 0.7f, "half strength gave $half of $full")
+        assertTrue(none < 0.001f, "no strength still drew $none")
+    }
+
+    @Test
+    fun scaleSizesTheGlow() {
+        val card = hosts[1]
+        val small = render(card, 0.6f, scale = 0.6f).also { it.save("standard_dark_scale_060") }.lightAdded()
+        val plain = render(card, 0.6f).lightAdded()
+        val large = render(card, 0.6f, scale = 1.5f).also { it.save("standard_dark_scale_150") }.lightAdded()
+        assertTrue(small < plain && plain < large, "the light grows with the scale: $small, $plain, $large")
+    }
+
+    @Test
+    fun coloursAndOptionsReachThePicture() {
+        val phone = hosts.first()
+        val (r, g, b) = render(phone, 0.8f, colors = VoiceGlowColors(Color.Red), options = VoiceGlowOptions(bandStrength = 0f)).also { it.save("mobile_dark_red") }.at(0.5f, 0.8f)
+        assertTrue(r > g * 2f && r > b * 2f, "a red glow is red: $r $g $b")
+        render(phone, 0.8f, colors = VoiceGlowColors.from(Color(0xFF2F6BFF))).save("mobile_dark_from_blue")
+        render(phone, 0.8f, colors = VoiceGlowColors.Colorful.copy(band = VoiceGlowBandColors(core = Color.Yellow, above = Color.Red, below = Color.Blue))).save("mobile_dark_band_colours")
+
+        // No band, and a glow that reaches less far: less light, lower down.
+        val plain = render(phone, 1f)
+        val low = render(phone, 1f, options = VoiceGlowOptions(reach = 1f)).also { it.save("mobile_dark_reach_1") }
+        assertTrue(low.at(0.5f, 0.6f).light() < plain.at(0.5f, 0.6f).light() - 0.03f)
+    }
+
+    @Test
+    fun pausedHoldsTheGlowWhereItIs() {
+        val paused = mutableStateOf(false)
+        val phone = hosts.first()
+        val scene = ImageComposeScene(width = phone.width * Scale, height = phone.height * Scale, density = Density(Scale.toFloat())) {
+            Box(Modifier.fillMaxSize().background(Color.Black)) {
+                VoiceGlow(level = { 0.8f }, modifier = Modifier.fillMaxSize(), type = VoiceGlowType.Mobile, theme = VoiceGlowTheme.Dark, paused = paused.value)
+            }
+        }
+        fun frame(n: Int) = scene.render(nanoTime = n * 1_000_000_000L / 30).at(0.3f, 0.9f)
+        for (n in 0..60) frame(n)
+        val before = frame(61)
+        val after = frame(75)
+        paused.value = true
+        frame(76)
+        val held = frame(77)
+        val later = frame(140)
+        scene.close()
+        assertTrue(before != after, "the glow moves while it runs")
+        assertTrue(held == later, "paused, the picture stays: $held then $later")
     }
 
     private companion object {

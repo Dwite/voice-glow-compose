@@ -83,17 +83,20 @@ internal class GlowTheme(
 
 /**
  * Everything the engine and the painter need for one glow: the type's
- * geometry (voice-glow's `presets`), the theme, and the caller's options over
- * both. Every length is in dp and already multiplied by [scale], as the
- * original does.
+ * geometry (voice-glow's `presets`), the theme, and the caller's options and
+ * colours over both. Every length is in dp and already multiplied by [scale],
+ * as the original does.
+ *
+ * [sizing] is the caller's own scale, on top of the type's.
  */
-internal class GlowConfig(type: VoiceGlowType, val theme: GlowTheme, o: VoiceGlowOptions, colors: VoiceGlowColors) {
+internal class GlowConfig(type: VoiceGlowType, val theme: GlowTheme, o: VoiceGlowOptions, colors: VoiceGlowColors, sizing: Float = 1f) {
     val dark = theme.dark
 
     val scale: Float
     val glowSize: Float
     val strokeOpacity: Float
     val innerOpacity: Float
+    val bloomOpacity: Float
     val idle: Float
     val reach: Float
     val spread: Float
@@ -101,16 +104,16 @@ internal class GlowConfig(type: VoiceGlowType, val theme: GlowTheme, o: VoiceGlo
     val bend: Float
     val bandStrength: Float
     val bandWidth: Float
-    val bandPosition = 0.35f
+    val bandPosition: Float
     val bandCurve: Float
     val bandSpread: Float
-    val bandSkew = 0.12f
+    val bandSkew: Float
     val bandOffset: Float
     val bandTail: Float
     val bandTailPosition: Float
     val bandTailCurve: Float
     val bandTailOverflow: Float
-    val bandAberration = 0.89f
+    val bandAberration: Float
     val glowWidth: Float
     val glowHeight: Float
     val lobeSpacing: Float
@@ -118,10 +121,14 @@ internal class GlowConfig(type: VoiceGlowType, val theme: GlowTheme, o: VoiceGlo
     val rangeHeight: Float
     val softness: Float
     val coreSize: Float
+
     /** The white wash at the source on a light background; 0 for none. */
     val coreLight: Float
+    val coreLightWidth: Float
+    val coreLightHeight: Float
     val strokeScale: Float
     val innerScale: Float
+    val innerHeight: Float
     val bloomScale: Float
     val bloomHeight: Float
 
@@ -132,10 +139,19 @@ internal class GlowConfig(type: VoiceGlowType, val theme: GlowTheme, o: VoiceGlo
     val hueSeconds: Float
     val hueBase = theme.hueBase
 
-    /** The monochrome look: no hue drift, and every layer dimmer. */
-    val still = colors.mono
-    val dim = if (colors.mono) 0.6f else 1f
+    /** The band's colours: the caller's, or the theme's. */
+    val bandCore: GlowRgb = colors.band?.let { GlowRgb.of(it.core) } ?: theme.bandCore
+    val bandAbove: OkLab = colors.band?.let { OkLab.of(GlowRgb.of(it.above)) } ?: theme.bandAbove
+    val bandMid: OkLab = colors.band?.let { OkLab.of(GlowRgb.of(it.between)) } ?: theme.bandMid
+    val bandBelow: OkLab = colors.band?.let { OkLab.of(GlowRgb.of(it.below)) } ?: theme.bandBelow
 
+    /** No hue drift. */
+    val still = !colors.drift
+
+    /** The monochrome look: every layer dimmer. */
+    val dim = colors.dim
+
+    val sensitivity = max(0f, o.sensitivity)
     val threshold = o.threshold
     val attack = o.attack
     val release = o.release
@@ -256,40 +272,47 @@ internal class GlowConfig(type: VoiceGlowType, val theme: GlowTheme, o: VoiceGlo
         }
 
         // The caller's options over the type, then the scale over every length.
-        val sc = max(0.05f, o.scale ?: scale)
+        val sc = max(0.05f, scale * sizing)
         this.scale = sc
-        this.glowSize = glowSize * sc
-        this.strokeOpacity = strokeOpacity
-        this.innerOpacity = innerOpacity
+        this.glowSize = max(0f, o.glowSize ?: glowSize) * sc
+        this.strokeOpacity = max(0f, o.strokeOpacity ?: strokeOpacity)
+        this.innerOpacity = max(0f, o.innerOpacity ?: innerOpacity)
+        this.bloomOpacity = max(0f, o.bloomOpacity ?: 1f)
         this.idle = (o.idle ?: idle).coerceIn(0f, 1f)
         this.reach = o.reach ?: reach
         this.spread = o.spread ?: spread
         this.flow = (o.flow ?: flow) * sc
         this.bend = max(0f, o.bend ?: bend) * sc
-        this.bandStrength = o.bandStrength ?: bandStrength
-        this.bandWidth = (o.bandWidth ?: bandWidth) * sc
-        this.bandCurve = bandCurve
-        this.bandSpread = bandSpread
-        this.bandOffset = bandOffset * sc
-        this.bandTail = bandTail
-        this.bandTailPosition = bandTailPosition
-        this.bandTailCurve = bandTailCurve
-        this.bandTailOverflow = bandTailOverflow * sc
-        this.glowWidth = glowWidth * sc
-        this.glowHeight = glowHeight * sc
-        this.lobeSpacing = lobeSpacing * sc
-        this.rangeWidth = rangeWidth * sc
-        this.rangeHeight = rangeHeight * sc
-        this.softness = softness
-        this.coreSize = coreSize * sc
-        this.coreLight = coreLight
-        this.strokeScale = strokeScale
-        this.innerScale = innerScale
-        this.bloomScale = bloomScale
-        this.bloomHeight = bloomHeight
-        this.strength = (o.strength ?: strength ?: theme.strength).coerceIn(0f, 1f)
-        this.brightness = o.brightness ?: brightness ?: theme.brightness
-        this.saturation = o.saturation ?: saturation ?: theme.saturation
+        this.bandStrength = max(0f, o.bandStrength ?: bandStrength)
+        this.bandWidth = max(0f, o.bandWidth ?: bandWidth) * sc
+        this.bandPosition = o.bandPosition ?: 0.35f
+        this.bandCurve = max(0.1f, o.bandCurve ?: bandCurve)
+        this.bandSpread = o.bandSpread ?: bandSpread
+        this.bandSkew = (o.bandSkew ?: 0.12f).coerceIn(-0.9f, 0.9f)
+        this.bandOffset = (o.bandOffset ?: bandOffset) * sc
+        this.bandTail = (o.bandTail ?: bandTail).coerceIn(0f, 1f)
+        this.bandTailPosition = o.bandTailPosition ?: bandTailPosition
+        this.bandTailCurve = o.bandTailCurve ?: bandTailCurve
+        this.bandTailOverflow = max(0f, o.bandTailOverflow ?: bandTailOverflow) * sc
+        this.bandAberration = (o.bandAberration ?: 0.89f).coerceIn(0f, 1f)
+        this.glowWidth = max(0f, o.glowWidth ?: glowWidth) * sc
+        this.glowHeight = max(0f, o.glowHeight ?: glowHeight) * sc
+        this.lobeSpacing = max(0.01f, o.lobeSpacing ?: lobeSpacing) * sc
+        this.rangeWidth = max(0f, o.rangeWidth ?: rangeWidth) * sc
+        this.rangeHeight = max(0f, o.rangeHeight ?: rangeHeight) * sc
+        this.softness = o.softness ?: softness
+        this.coreSize = max(0f, o.coreSize ?: coreSize) * sc
+        this.coreLight = (o.coreLight ?: coreLight).coerceIn(0f, 3f)
+        this.coreLightWidth = max(0f, o.coreLightWidth ?: 1f)
+        this.coreLightHeight = max(0f, o.coreLightHeight ?: 1f)
+        this.strokeScale = max(0f, o.strokeScale ?: strokeScale)
+        this.innerScale = max(0f, o.innerScale ?: innerScale)
+        this.innerHeight = max(0f, o.innerHeight ?: 1f)
+        this.bloomScale = max(0f, o.bloomScale ?: bloomScale)
+        this.bloomHeight = max(0f, o.bloomHeight ?: bloomHeight)
+        this.strength = (strength ?: theme.strength).coerceIn(0f, 1f)
+        this.brightness = max(0f, o.brightness ?: brightness ?: theme.brightness)
+        this.saturation = max(0f, o.saturation ?: saturation ?: theme.saturation)
         this.hueRange = max(0f, o.hueRange ?: theme.hueRange)
         this.hueSeconds = max(0.5f, o.hueSeconds ?: theme.hueSeconds)
         this.lobeSpan = LobeRestSpacing * GlowLobes.size * this.lobeSpacing

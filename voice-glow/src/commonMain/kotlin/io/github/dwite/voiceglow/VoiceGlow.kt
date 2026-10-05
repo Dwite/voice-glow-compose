@@ -33,14 +33,28 @@ import kotlinx.coroutines.flow.first
  * host's content, as the original does, or behind it; [VoiceGlowBox] does the
  * first for you.
  *
+ * ```
+ * VoiceGlow(
+ *     level = { meter.level },
+ *     type = VoiceGlowType.Mobile,
+ *     colors = VoiceGlowColors.from(MaterialTheme.colorScheme.primary),
+ *     strength = 0.7f,
+ * )
+ * ```
+ *
  * @param level the voice, 0–1, read every frame without recomposing: the
  *   loudness of a microphone, of a playing voice, of a speech API's volume
  *   event. A steady value works too; the glow moves on its own.
- * @param type the host the glow sits in.
- * @param active fades the glow in and out.
+ * @param type the host the glow sits in. It sets the starting point of everything in [options].
+ * @param colors the lobe, band and mood colours; a new set crosses over.
+ * @param theme the background the glow is tuned for.
  * @param mood how the voice feels; [VoiceMood.Neutral] keeps the glow's own colours.
- * @param colors the lobe colours; a new set crosses over.
+ * @param strength how much of the glow shows, 0–1; it can be animated freely.
+ * @param scale sizes the whole effect as one thing, on top of the [type]'s own size.
+ * @param active fades the glow in and out.
+ * @param paused holds the glow exactly where it is, without fading it out.
  * @param cornerRadius the host's corner radius, which the glow is cut to and its edge line follows.
+ * @param options every finer adjustment.
  * @param haze thins the light with height, where text sits low on a screen.
  * @param animated off draws the one frame a steady [level] settles on: for previews and screenshot tests.
  */
@@ -49,10 +63,13 @@ public fun VoiceGlow(
     level: () -> Float,
     modifier: Modifier = Modifier,
     type: VoiceGlowType = VoiceGlowType.Standard,
-    active: Boolean = true,
-    mood: VoiceMood = VoiceMood.Neutral,
     colors: VoiceGlowColors = VoiceGlowColors.Colorful,
     theme: VoiceGlowTheme = VoiceGlowTheme.Auto,
+    mood: VoiceMood = VoiceMood.Neutral,
+    strength: Float = 1f,
+    scale: Float = 1f,
+    active: Boolean = true,
+    paused: Boolean = false,
     cornerRadius: Dp = 0.dp,
     options: VoiceGlowOptions = DefaultOptions,
     haze: VoiceGlowHaze? = null,
@@ -63,11 +80,12 @@ public fun VoiceGlow(
         VoiceGlowTheme.Light -> false
         VoiceGlowTheme.Auto -> isSystemInDarkTheme()
     }
-    val config = remember(type, dark, options, colors) { GlowConfig(type, if (dark) GlowTheme.Dark else GlowTheme.Light, options, colors) }
+    val config = remember(type, dark, options, colors, scale) { GlowConfig(type, if (dark) GlowTheme.Dark else GlowTheme.Light, options, colors, scale) }
     val engine = remember { GlowEngine() }
     val painter = remember { GlowPainter() }
     val latestLevel by rememberUpdatedState(level)
     val latestActive by rememberUpdatedState(active)
+    val latestPaused by rememberUpdatedState(paused)
     val latestMood by rememberUpdatedState(mood)
     val latestColors by rememberUpdatedState(colors)
     val latestConfig by rememberUpdatedState(config)
@@ -79,9 +97,9 @@ public fun VoiceGlow(
             val still = coroutineContext[MotionDurationScale]?.scaleFactor == 0f
             var last = 0L
             while (true) {
-                // Asleep while hidden: no frames are asked for until it is switched on again.
-                if (!latestActive && !engine.isVisible) {
-                    snapshotFlow { latestActive }.first { it }
+                // Asleep while hidden or paused: no frames are asked for until it is needed again.
+                if (latestPaused || (!latestActive && !engine.isVisible)) {
+                    snapshotFlow { !latestPaused && (latestActive || engine.isVisible) }.first { it }
                     last = 0L
                 }
                 withFrameNanos { now ->
@@ -102,30 +120,34 @@ public fun VoiceGlow(
             if (!active) return@Canvas
             engine.settle(level(), mood, colors, config)
         }
-        if (frame.presence > 0.002f) with(painter) { drawGlow(frame, config, cornerRadius.toPx(), haze) }
+        if (frame.presence > 0.002f) with(painter) { drawGlow(frame, config, strength, cornerRadius.toPx(), haze) }
     }
 }
 
 /**
  * [content] with a [VoiceGlow] over it, cut to [cornerRadius]: the shape of
- * the original component. The glow takes no touches.
+ * the original component. The glow takes no touches. See [VoiceGlow] for the
+ * parameters.
  */
 @Composable
 public fun VoiceGlowBox(
     level: () -> Float,
     modifier: Modifier = Modifier,
     type: VoiceGlowType = VoiceGlowType.Standard,
-    active: Boolean = true,
-    mood: VoiceMood = VoiceMood.Neutral,
     colors: VoiceGlowColors = VoiceGlowColors.Colorful,
     theme: VoiceGlowTheme = VoiceGlowTheme.Auto,
+    mood: VoiceMood = VoiceMood.Neutral,
+    strength: Float = 1f,
+    scale: Float = 1f,
+    active: Boolean = true,
+    paused: Boolean = false,
     cornerRadius: Dp = 0.dp,
     options: VoiceGlowOptions = DefaultOptions,
     content: @Composable BoxScope.() -> Unit,
 ) {
     Box(modifier) {
         content()
-        VoiceGlow(level, Modifier.matchParentSize(), type, active, mood, colors, theme, cornerRadius, options)
+        VoiceGlow(level, Modifier.matchParentSize(), type, colors, theme, mood, strength, scale, active, paused, cornerRadius, options)
     }
 }
 

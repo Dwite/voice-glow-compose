@@ -4,10 +4,13 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import kotlin.math.PI
+import kotlin.math.atan2
 import kotlin.math.cbrt
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /** An sRGB colour, 0–1 per channel. */
 @Immutable
@@ -30,6 +33,13 @@ internal data class OkLab(val l: Float, val a: Float, val b: Float) {
         a = a + (other.a - a) * t,
         b = b + (other.b - b) * t,
     )
+
+    /** This colour turned [hueDegrees] around the hue circle, at [lightness], with at least [minChroma] of colour. */
+    fun shifted(hueDegrees: Float, lightness: Float, minChroma: Float): OkLab {
+        val chroma = max(minChroma, sqrt(a * a + b * b))
+        val hue = atan2(b, a) + hueDegrees * PI.toFloat() / 180f
+        return OkLab(lightness.coerceIn(0f, 1f), chroma * cos(hue), chroma * sin(hue))
+    }
 
     fun toRgb(): GlowRgb {
         val l3 = (l + 0.3963377774f * a + 0.2158037573f * b).cubed()

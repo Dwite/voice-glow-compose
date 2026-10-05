@@ -1,5 +1,6 @@
 package io.github.dwite.voiceglow
 
+import androidx.compose.ui.graphics.Color
 import io.github.dwite.voiceglow.internal.GlowColorMatrix
 import io.github.dwite.voiceglow.internal.GlowConfig
 import io.github.dwite.voiceglow.internal.GlowEngine
@@ -144,6 +145,92 @@ class GlowEngineTest {
             assertNear(wanted.g, now.g)
             assertNear(wanted.b, now.b)
         }
+    }
+
+    @Test
+    fun everyOptionOverridesItsTypeAndNothingElse() {
+        val plain = config(VoiceGlowType.Standard)
+        val tuned = config(VoiceGlowType.Standard, options = VoiceGlowOptions(reach = 2.5f, bandCurve = 2.2f, glowWidth = 0.9f, bandTail = 0f, hueRange = 0f, coreLight = 1f))
+        assertEquals(2.5f, tuned.reach)
+        assertEquals(2.2f, tuned.bandCurve)
+        assertEquals(0.9f, tuned.glowWidth)
+        assertEquals(0f, tuned.bandTail)
+        assertEquals(0f, tuned.hueRange)
+        assertEquals(1f, tuned.coreLight)
+        // What was left alone is still the type's.
+        assertEquals(plain.spread, tuned.spread)
+        assertEquals(plain.bend, tuned.bend)
+        assertEquals(plain.bandWidth, tuned.bandWidth)
+        assertEquals(plain.saturation, tuned.saturation)
+    }
+
+    @Test
+    fun scaleSizesEveryLengthOnTopOfTheTypesOwn() {
+        val pill = GlowConfig(VoiceGlowType.Pill, GlowTheme.Dark, VoiceGlowOptions(), colors)
+        val doubled = GlowConfig(VoiceGlowType.Pill, GlowTheme.Dark, VoiceGlowOptions(), colors, sizing = 2f)
+        assertNear(pill.scale * 2f, doubled.scale, tolerance = 0.0001f)
+        assertNear(pill.bend * 2f, doubled.bend, tolerance = 0.0001f)
+        assertNear(pill.glowWidth * 2f, doubled.glowWidth, tolerance = 0.0001f)
+        assertNear(pill.lobeSpan * 2f, doubled.lobeSpan, tolerance = 0.001f)
+        // Shares and exponents are not lengths.
+        assertEquals(pill.reach, doubled.reach)
+        assertEquals(pill.bandCurve, doubled.bandCurve)
+    }
+
+    @Test
+    fun sensitivityLiftsAQuietSource() {
+        val quiet = GlowEngine().settle(0.05f, VoiceMood.Neutral, colors, config()).level
+        val lifted = GlowEngine().settle(0.05f, VoiceMood.Neutral, colors, config(options = VoiceGlowOptions(sensitivity = 6f))).level
+        assertTrue(lifted > quiet * 3f, "a raw 0.05 read as $quiet, and as $lifted with six times the sensitivity")
+    }
+
+    @Test
+    fun coloursCanBeYourOwn() {
+        val red = VoiceGlowColors(Color.Red)
+        val lobes = GlowEngine().settle(0.8f, VoiceMood.Neutral, red, config(colors = red, options = VoiceGlowOptions(hueRange = 0f))).colors
+        assertTrue(lobes.all { it.r > 0.9f && it.g < 0.2f && it.b < 0.2f }, "one colour fills every lobe: ${lobes.toList()}")
+        // Equal colours are equal sets, so a set made on every recomposition restarts nothing.
+        assertEquals(VoiceGlowColors(listOf(Color.Red, Color.Blue)), VoiceGlowColors(listOf(Color.Red, Color.Blue)))
+        assertTrue(VoiceGlowColors(Color.Red) != VoiceGlowColors(Color.Blue))
+        assertEquals(VoiceGlowColors.Ocean, VoiceGlowColors.Ocean.copy())
+        assertTrue(VoiceGlowColors.Ocean != VoiceGlowColors.Ocean.copy(drift = false))
+    }
+
+    @Test
+    fun aPaletteGrowsAroundOneColour() {
+        val seed = Color(0xFF2F6BFF)
+        val brand = VoiceGlowColors.from(seed)
+        val c = config(colors = brand, options = VoiceGlowOptions(hueRange = 0f, brightness = 1f, saturation = 1f))
+        val lobes = GlowEngine().settle(0.8f, VoiceMood.Neutral, brand, c).colors
+        // Every lobe stays in the seed's family (blue leads), and they are not all the same.
+        assertTrue(lobes.all { it.b > it.r && it.b > 0.6f }, "a blue seed gives blues: ${lobes.toList()}")
+        assertTrue(lobes.toSet().size == lobes.size)
+        // A wider spread reaches further around the hue circle.
+        val wide = VoiceGlowColors.from(seed, hueSpread = 120f)
+        val far = GlowEngine().settle(0.8f, VoiceMood.Neutral, wide, config(colors = wide, options = VoiceGlowOptions(hueRange = 0f, brightness = 1f, saturation = 1f))).colors
+        assertTrue(far.any { it.b < it.r || it.b < it.g }, "a spread of 120 degrees leaves the blues: ${far.toList()}")
+    }
+
+    @Test
+    fun theBandTakesItsOwnColours() {
+        val own = VoiceGlowColors.Colorful.copy(band = VoiceGlowBandColors(core = Color.Yellow, above = Color.Red, below = Color.Blue))
+        val frame = GlowEngine().settle(0.8f, VoiceMood.Neutral, own, config(colors = own))
+        assertTrue(frame.bandCore.r > 0.9f && frame.bandCore.g > 0.9f && frame.bandCore.b < 0.1f, "${frame.bandCore}")
+        assertTrue(frame.bandAbove.r > 0.9f && frame.bandAbove.b < 0.1f, "${frame.bandAbove}")
+        assertTrue(frame.bandBelow.b > 0.9f && frame.bandBelow.r < 0.1f, "${frame.bandBelow}")
+        // Left alone, the dark theme's band has a white core.
+        assertEquals(GlowRgb(1f, 1f, 1f), GlowEngine().settle(0.8f, VoiceMood.Neutral, colors, config()).bandCore)
+    }
+
+    @Test
+    fun coloursCanHoldStill() {
+        val held = VoiceGlowColors.Colorful.copy(drift = false)
+        val c = config(colors = held)
+        val engine = GlowEngine()
+        repeat(60) { engine.step(frameSeconds, 0.8f, true, VoiceMood.Neutral, held, c) }
+        val early = engine.frame.colors.toList()
+        repeat(240) { engine.step(frameSeconds, 0.8f, true, VoiceMood.Neutral, held, c) }
+        assertEquals(early, engine.frame.colors.toList())
     }
 
     @Test

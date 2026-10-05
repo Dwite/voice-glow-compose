@@ -86,7 +86,7 @@ internal class GlowEngine {
 
         // No spectrum from a plain level: the bands get slow, out-of-phase
         // wobbles scaled by the level, so the lobes still ripple.
-        val raw = rawLevel.coerceIn(0f, 1f)
+        val raw = (rawLevel * c.sensitivity).coerceIn(0f, 1f)
         level = follow(level, shape(raw, c.threshold), dt, c.attack, c.release)
         for (b in 0 until 3) {
             val wobble = when {
@@ -127,7 +127,7 @@ internal class GlowEngine {
     /** The frame a steady [rawLevel] settles on, with nothing in motion: for previews and screenshots. */
     fun settle(rawLevel: Float, mood: VoiceMood, colors: VoiceGlowColors, c: GlowConfig): GlowFrame {
         presence = 1f
-        level = shape(rawLevel.coerceIn(0f, 1f), c.threshold)
+        level = shape((rawLevel * c.sensitivity).coerceIn(0f, 1f), c.threshold)
         bands.fill(level)
         moodValence = mood.valence
         moodArousal = mood.arousal
@@ -170,10 +170,10 @@ internal class GlowEngine {
         // reads in the mood's colour along with the glow.
         fun fringe(color: OkLab, moodIndex: Int): GlowRgb =
             (moodColors?.let { color.mixed(it[moodIndex], 0.75f * moodAmount) } ?: color).toRgb()
-        f.bandCore = c.theme.bandCore
-        f.bandAbove = fringe(c.theme.bandAbove, 1)
-        f.bandMid = fringe(c.theme.bandMid, 0)
-        f.bandBelow = fringe(c.theme.bandBelow, 2)
+        f.bandCore = c.bandCore
+        f.bandAbove = fringe(c.bandAbove, 1)
+        f.bandMid = fringe(c.bandMid, 0)
+        f.bandBelow = fringe(c.bandBelow, 2)
     }
 
     private fun moodTarget(mood: VoiceMood, c: GlowConfig): Float =

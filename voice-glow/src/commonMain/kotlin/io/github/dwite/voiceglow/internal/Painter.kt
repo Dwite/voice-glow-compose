@@ -45,6 +45,9 @@ internal class GlowPainter {
     private val ridgeY = FloatArray(MaxPieces + 1)
     private val ridgeStretch = FloatArray(MaxPieces + 1)
     private var pieces = 0
+
+    /** The strength in use for the frame being drawn: the type's own times the caller's. */
+    private var strength = 1f
     private val host = Path()
     private val ring = Path().apply { fillType = PathFillType.EvenOdd }
 
@@ -71,10 +74,12 @@ internal class GlowPainter {
     private var hazeSize = Size.Unspecified
     private var hazeDown: Brush? = null
 
-    /** [cornerRadius] is the host's, in px. */
-    fun DrawScope.drawGlow(f: GlowFrame, c: GlowConfig, cornerRadius: Float, haze: VoiceGlowHaze?) {
+    /** [strength] is the caller's, 0–1, on top of the type's own; [cornerRadius] is the host's, in px. */
+    fun DrawScope.drawGlow(f: GlowFrame, c: GlowConfig, strength: Float, cornerRadius: Float, haze: VoiceGlowHaze?) {
         val radius = cornerRadius.coerceIn(0f, min(size.width, size.height) / 2f)
         if (builtFor !== c || builtSize != size || builtRadius != radius) build(c, radius)
+        this@GlowPainter.strength = c.strength * strength.coerceIn(0f, 1f)
+        if (this@GlowPainter.strength <= 0.002f) return
         if (radius > 0f) clipPath(host) { drawHazed(f, c, radius, haze) } else clipRect { drawHazed(f, c, radius, haze) }
     }
 
@@ -192,7 +197,7 @@ internal class GlowPainter {
         val dp = density
         val w = size.width
         val h = size.height
-        val base = f.presence * f.glow * c.strength * c.dim
+        val base = f.presence * f.glow * strength * c.dim
 
         // The ellipse the edge light rises in: it grows with the level and humps with the bend.
         val edgeRx = 170f * c.rangeWidth * f.w * dp
@@ -201,7 +206,7 @@ internal class GlowPainter {
 
         // Inner light: the lobes, kept to a soft band along the edges.
         layer(edgeBox, min(1f, base * c.theme.innerOpacity * c.innerOpacity)) {
-            lobes(f, alpha = 0.46f, widthScale = c.glowWidth * 0.9f * c.innerScale, heightScale = c.glowHeight * 0.9f * c.innerScale, lift = 0f, falloff = lobeFalloff)
+            lobes(f, alpha = 0.46f, widthScale = c.glowWidth * 0.9f * c.innerScale, heightScale = c.glowHeight * 0.9f * c.innerScale * c.innerHeight, lift = 0f, falloff = lobeFalloff)
             ellipseMask(innerMask, w / 2f, h, edgeRx, edgeRy)
             drawIntoCanvas { it.saveLayer(edgeBox, cutPaint) }
             drawRect(Color.Black, edgeBox.topLeft, edgeBox.size)
@@ -237,7 +242,7 @@ internal class GlowPainter {
         val bloomRx = 200f * c.rangeWidth * f.w * dp
         val bloomRy = (130f * c.rangeHeight * f.h + f.lift) * dp
         val bloomBox = Rect(0f, (h - bloomRy).coerceAtLeast(0f), w, h)
-        layer(bloomBox, min(1f, base * c.theme.bloomOpacity)) {
+        layer(bloomBox, min(1f, base * c.theme.bloomOpacity * c.bloomOpacity)) {
             lobes(f, alpha = c.theme.bloomAlpha, widthScale = c.glowWidth * 1.15f * c.bloomScale, heightScale = c.glowHeight * 1.5f * c.bloomScale * c.bloomHeight, lift = 0f, falloff = bloomFalloff)
             ellipseMask(bloomMask, w / 2f, h, bloomRx, bloomRy)
             drawRect(edgeDown, bloomBox.topLeft, bloomBox.size, blendMode = BlendMode.DstIn)
@@ -245,7 +250,7 @@ internal class GlowPainter {
         }
 
         traceRidge(f, c)
-        band(f, c, f.presence * c.strength)
+        band(f, c, f.presence * strength)
         coreWash(f, c)
     }
 
@@ -467,12 +472,12 @@ internal class GlowPainter {
     private fun DrawScope.coreWash(f: GlowFrame, c: GlowConfig) {
         val wash = wash ?: return
         val boost = (c.coreLight - 1f).coerceIn(0f, 2f)
-        val opacity = f.presence * min(1f, f.glow * min(1f, c.coreLight) * (1.6f + 1.4f * boost))
+        val opacity = f.presence * strength * min(1f, f.glow * min(1f, c.coreLight) * (1.6f + 1.4f * boost))
         if (opacity <= 0.005f) return
         val dp = density
         val grow = 1f + 0.3f * boost
-        val rx = 120f * grow * c.scale * f.w * dp
-        val ry = (70f * grow * c.scale * f.h + f.lift) * dp
+        val rx = 120f * c.coreLightWidth * grow * c.scale * f.w * dp
+        val ry = (70f * c.coreLightHeight * grow * c.scale * f.h + f.lift) * dp
         if (rx < 0.5f || ry < 0.5f) return
         val w = size.width
         val h = size.height
