@@ -1,0 +1,44 @@
+<!doctype html>
+<!-- The original voice-glow, alone on a page: the ground truth the Compose port is compared with. -->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>html,body,#root{margin:0;height:100%;overflow:hidden}</style>
+<script type="importmap">
+{"imports":{
+  "react":"https://esm.sh/react@18.3.1",
+  "react/jsx-runtime":"https://esm.sh/react@18.3.1/jsx-runtime",
+  "react-dom/client":"https://esm.sh/react-dom@18.3.1/client?deps=react@18.3.1",
+  "voice-glow":"./node_modules/voice-glow/dist/index.es.js"
+}}
+</script>
+</head>
+<body>
+<div id="root"></div>
+<script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { VoiceBeam } from 'voice-glow';
+
+// ?type=mobile|default|pill &theme=dark|light &level=0..1 &radius=px &variant=colorful|mono|...
+const q = new URLSearchParams(location.search);
+const theme = q.get('theme') ?? 'dark';
+const radius = parseFloat(q.get('radius') ?? '0');
+document.body.style.background = theme === 'dark' ? '#000' : '#fff';
+const props = {
+  type: q.get('type') ?? 'mobile',
+  theme,
+  level: parseFloat(q.get('level') ?? '0.35'),
+  colorVariant: q.get('variant') ?? 'colorful',
+  // Held still, and without the web-only warp of the host under the band, so one frame can be compared.
+  flow: 0, hueRange: 0, distortion: 0,
+  borderRadius: radius,
+  style: { display: 'block', width: '100vw', height: '100vh' },
+};
+createRoot(document.getElementById('root')).render(
+  React.createElement(VoiceBeam, props,
+    React.createElement('div', { style: { width: '100vw', height: '100vh', borderRadius: radius, background: theme === 'dark' ? '#1d1d1d' : '#f4f4f5' } })));
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "voice-glow-parity",
+  "private": true,
+  "type": "module",
+  "description": "Renders the original voice-glow next to the Compose port and compares the pictures.",
+  "scripts": {
+    "shoot": "node shoot.mjs",
+    "compare": "python3 compare.py"
+  },
+  "dependencies": {
+    "puppeteer-core": "^24.0.0",
+    "voice-glow": "0.3.0"
+  }
+}
