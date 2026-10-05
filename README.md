@@ -1,6 +1,6 @@
 # voice-glow for Compose
 
-A sound-reactive glow for Compose Multiplatform: a centred, colourful light along the bottom edge of a box that rises and blooms with a voice, with a bright band riding its ceiling. Give it a level and it does the rest.
+A sound-reactive glow for Compose Multiplatform: a centred, colourful light along the bottom edge of a box that rises and blooms with a voice, with a bright band riding its ceiling. Give it a level and it does the rest. It also comes as a ring around an avatar: see [Halo](#halo-the-glow-around-a-figure).
 
 ![The glow following a voice, in a phone screen, two cards, two pills and two moods](docs/demo.gif)
 
@@ -76,6 +76,27 @@ The glow is authored for a chat input about 350 dp wide. `type` retunes it for o
 | `VoiceGlowType.Standard` | A chat input or a card. |
 | `VoiceGlowType.Pill` | A small recording pill, about 150 × 44 dp. |
 | `VoiceGlowType.Mobile` | The bottom of a phone screen. |
+
+## Halo: the glow around a figure
+
+`VoiceHalo` is the same glow as a ring around an avatar, a mascot or an agent's orb. A fine ring shows as soon as it is on, the sign that someone is listening. It swells and blooms into colour with a voice, and the colours travel around it.
+
+| | |
+|---|---|
+| ![Halo on a dark background: at rest, hearing a voice, a happy voice, and the figure speaking](docs/halo-dark.png) | ![The same on a light background](docs/halo-light.png) |
+
+```kotlin
+VoiceHaloBox(
+    level = { if (agent.isSpeaking) agent.loudness else microphone.loudness },
+    outgoing = agent.isSpeaking,          // the figure's own voice: soft waves leave the ring
+    colors = if (agent.isSpeaking) agentColors else VoiceGlowColors.Colorful,
+    modifier = Modifier.size(220.dp),
+) {
+    Avatar(Modifier.size(160.dp))
+}
+```
+
+This arrangement is not part of the original voice-glow. It is made of the same parts (the seven lobes, the band with its fringes, the same response to a voice) and takes the same `colors`, `theme`, `mood`, `strength`, `active` and `paused`. `VoiceHaloShape` holds its geometry, as shares of the box: `radius`, `swell`, `auraInside`, `auraOutside`, `bandWidth`, `restingRing` (0 shows nothing until a voice comes), `turnSeconds`, and the waves' `waveTravel`, `waveEvery` and `waveSeconds`. Of `VoiceGlowOptions`, the response, light and mood options apply, with `bandStrength` and `bandAberration`.
 
 ## Everything you can set
 
@@ -191,7 +212,7 @@ VoiceGlow(level = { level }, type = VoiceGlowType.Mobile, haze = VoiceGlowHaze(f
 
 ![The original and the port, side by side](docs/parity.png)
 
-`tools/parity` renders the original in Chrome and the port with Skia, at the same size and the same level, and compares them point by point. Over 32 cases (three types, two themes, four levels, eight palettes) the mean difference in brightness is 1.2 of 255. The largest mean for one case is 4.8, for the dark pill at full level. The two are never identical: the original breathes and ripples while its picture is taken, and it blurs where the port shades.
+`tools/parity` renders the original in Chrome and the port with Skia, at the same size and the same level, and compares them point by point. Over 32 cases (three types, two themes, four levels, eight palettes) the mean difference in brightness is 1.2 of 255. The largest mean for one case is 4.8, for the dark pill at full level. The two are never identical: the original breathes and ripples while its picture is taken, and it blurs where the port shades. The halo has no original to compare with.
 
 ```bash
 cd tools/parity

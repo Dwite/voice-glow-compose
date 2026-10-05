@@ -2,6 +2,7 @@ package io.github.dwite.voiceglow
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -52,4 +53,16 @@ private fun ReadmeSamples(brandColor: Color, pink: Color, lavender: Color, viole
     val merged = VoiceMood.blend(tone = VoiceMood.Calm, meaning = VoiceMood.Happy)
 
     VoiceGlow(level = { level }, type = VoiceGlowType.Mobile, haze = VoiceGlowHaze(from = 60.dp, to = 90.dp, keep = 0.4f))
+
+    val agentSpeaking = false
+    val agentColors = VoiceGlowColors.Candy
+    VoiceHaloBox(
+        level = { level },
+        outgoing = agentSpeaking,
+        colors = if (agentSpeaking) agentColors else VoiceGlowColors.Colorful,
+        modifier = Modifier.size(220.dp),
+    ) {
+        Box(Modifier.size(160.dp))
+    }
+    VoiceHalo(level = { level }, shape = VoiceHaloShape(radius = 0.4f, restingRing = 0f, turnSeconds = 8f), options = VoiceGlowOptions(attack = 0.15f))
 }

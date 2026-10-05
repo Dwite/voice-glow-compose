@@ -27,9 +27,17 @@ internal class GlowFrame {
     var lift = 0f
     var bendA = 0f
 
-    /** Per lobe: offset along the flow in dp, and amplitude. */
+    /** How far the glow is lifted, 0–1: the voice with the idle breathing folded under it. */
+    var rise = 0f
+
+    /**
+     * Per lobe: offset along the flow in dp, and amplitude. [lobeLift] is the
+     * amplitude from the voice alone; [lobeL] also fades it out toward the
+     * ends of a straight edge.
+     */
     val lobeX = FloatArray(GlowLobes.size)
     val lobeL = FloatArray(GlowLobes.size) { 1f }
+    val lobeLift = FloatArray(GlowLobes.size) { 1f }
 
     /** Lobe colours after the mood blend and the hue drift. */
     val colors = Array(GlowLobes.size) { GlowRgb(0f, 0f, 0f) }
@@ -110,6 +118,7 @@ internal class GlowEngine {
         f.w = 0.85f + c.spread * eff
         f.lift = c.bend * eff
         f.bendA = if (c.bend > 0f) eff else 0f
+        f.rise = eff
 
         // Flow: the spectrum slides sideways as the voice comes in.
         val span = c.lobeSpan
@@ -117,7 +126,8 @@ internal class GlowEngine {
         GlowLobes.forEachIndexed { i, lobe ->
             val x = wrapX(lobe.x * c.lobeSpacing + phase, span)
             f.lobeX[i] = x
-            f.lobeL[i] = (if (c.ripple) 0.6f + 0.7f * bands[lobe.band] else 1f) * edgeEnvelope(x, span)
+            f.lobeLift[i] = if (c.ripple) 0.6f + 0.7f * bands[lobe.band] else 1f
+            f.lobeL[i] = f.lobeLift[i] * edgeEnvelope(x, span)
         }
 
         stepColors(dt, mood, colors, c, still)

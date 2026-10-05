@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Slider
@@ -31,6 +32,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,6 +41,7 @@ import io.github.dwite.voiceglow.VoiceGlowBox
 import io.github.dwite.voiceglow.VoiceGlowColors
 import io.github.dwite.voiceglow.VoiceGlowTheme
 import io.github.dwite.voiceglow.VoiceGlowType
+import io.github.dwite.voiceglow.VoiceHaloBox
 import io.github.dwite.voiceglow.VoiceMood
 import kotlin.math.abs
 import kotlin.math.sin
@@ -71,6 +74,7 @@ fun Sample() {
     var manual by remember { mutableFloatStateOf(0.6f) }
     var strength by remember { mutableFloatStateOf(1f) }
     var scale by remember { mutableFloatStateOf(1f) }
+    var agentSpeaks by remember { mutableStateOf(false) }
     var seconds by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(Unit) { while (true) withFrameNanos { seconds = it / 1e9f } }
 
@@ -82,6 +86,13 @@ fun Sample() {
     val ink = if (dark) Color(0xFFEDEDED) else Color(0xFF1B1B1F)
 
     val hosts: @Composable () -> Unit = {
+        // An agent's avatar: the ring listens, or sends waves out while the agent itself speaks.
+        Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
+            VoiceHaloBox(level, Modifier.size(132.dp), palette.second, theme, mood.second, strength, outgoing = agentSpeaks) {
+                Box(Modifier.size(94.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFF8E7CFF), Color(0xFFFF8FB8)))))
+            }
+            Choices("Halo", listOf("Listening", "Speaking"), if (agentSpeaks) "Speaking" else "Listening", ink) { agentSpeaks = it == "Speaking" }
+        }
         // A chat input or a card.
         VoiceGlowBox(level, Modifier.widthIn(max = 350.dp).fillMaxWidth().height(120.dp), VoiceGlowType.Standard, palette.second, theme, mood.second, strength, scale, cornerRadius = 20.dp) {
             Box(Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)).background(surface).padding(20.dp)) {
